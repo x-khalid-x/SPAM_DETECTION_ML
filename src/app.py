@@ -8,31 +8,50 @@ from sklearn.pipeline import Pipeline
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.svm import LinearSVC
 
-# Permet d'importer preprocess.py depuis le dossier src/
+from io import BytesIO
+from datetime import datetime
+
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
+from reportlab.lib.units import cm
+
+# -------------------------------------------------------------------
+# Import preprocess
+# -------------------------------------------------------------------
 sys.path.append(os.path.dirname(__file__))
 from preprocess import normalize_spam_patterns
 
-
+# -------------------------------------------------------------------
+# Paths & Infos
+# -------------------------------------------------------------------
 MODEL_PATH = "models/spam_pipeline.pkl"
 DATA_PATH = "data/spam.csv"
 
+PROJECT_TITLE = "Détection de Spam par Machine Learning"
+STUDENT_NAME = "Khalid Chliyahe"
+PROGRAM = "Data Science / Machine Learning"
+GITHUB_URL = "https://github.com/x-khalid-x/SPAM-DETECTION-ML"
+STREAMLIT_URL = "https://TON-APP.streamlit.app"
+
+# -------------------------------------------------------------------
+# Streamlit setup
+# -------------------------------------------------------------------
 st.set_page_config(page_title="Spam Detection", page_icon="📩")
 st.title("📩 Détection de spam")
 st.write("Colle un message et le modèle prédit s'il est **SPAM** ou **HAM**.")
 
-# --- Historique ---
+# -------------------------------------------------------------------
+# Session state
+# -------------------------------------------------------------------
 if "history" not in st.session_state:
-    st.session_state.history = []  # liste de dicts
+    st.session_state.history = []
 
-
+# -------------------------------------------------------------------
+# Utils
+# -------------------------------------------------------------------
 def score_level(score: float) -> str:
-    """
-    Convertit la valeur absolue du score de décision en niveau lisible.
-    Seuils simples (tu peux les ajuster) :
-    - < 0.5  : Faible
-    - < 1.5  : Moyen
-    - >= 1.5 : Élevé
-    """
     s = abs(float(score))
     if s < 0.5:
         return "Faible"
@@ -40,209 +59,236 @@ def score_level(score: float) -> str:
         return "Moyen"
     return "Élevé"
 
+# -------------------------------------------------------------------
+# PDF export (PRO)
+# -------------------------------------------------------------------
+def history_to_pdf_pro(history):
+    buffer = BytesIO()
+    styles = getSampleStyleSheet()
 
+    title_style = ParagraphStyle(
+        "cover_title",
+        parent=styles["Title"],
+        alignment=1,
+        fontSize=22,
+        spaceAfter=20,
+    )
+
+    center = ParagraphStyle(
+        "center",
+        parent=styles["Normal"],
+        alignment=1,
+        fontSize=12,
+        spaceAfter=12,
+    )
+
+    small = ParagraphStyle(
+        "small",
+        parent=styles["Normal"],
+        fontSize=9,
+        leading=11,
+    )
+
+    msg_style = ParagraphStyle(
+        "msg",
+        parent=styles["Normal"],
+        fontSize=9,
+        leading=11,
+    )
+
+    def footer(canvas, doc):
+        canvas.saveState()
+        canvas.setFont("Helvetica", 9)
+        canvas.setFillColor(colors.grey)
+        canvas.drawString(2 * cm, 1.2 * cm, "Spam Detection – Historique")
+        canvas.drawRightString(A4[0] - 2 * cm, 1.2 * cm, f"Page {doc.page}")
+        canvas.restoreState()
+
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=2 * cm,
+        leftMargin=2 * cm,
+        topMargin=2 * cm,
+        bottomMargin=2 * cm,
+    )
+
+    elements = []
+
+    # ---------------- COVER PAGE ----------------
+    elements.append(Spacer(1, 3 * cm))
+    elements.append(Paragraph(PROJECT_TITLE, title_style))
+    elements.append(Paragraph(f"<b>Étudiant :</b> {STUDENT_NAME}", center))
+    elements.append(Paragraph(f"<b>Filière :</b> {PROGRAM}", center))
+    elements.append(Spacer(1, 12))
+    elements.append(Paragraph("<b>Modèle :</b> LinearSVC + TF-IDF", center))
+    elements.append(Paragraph("<b>Métrique :</b> F1-score (classe spam)", center))
+    elements.append(Spacer(1, 12))
+    elements.append(Paragraph(f"<b>GitHub :</b> {GITHUB_URL}", center))
+    elements.append(Paragraph(f"<b>Streamlit :</b> {STREAMLIT_URL}", center))
+    elements.append(Spacer(1, 20))
+    elements.append(
+        Paragraph(
+            f"<b>Date :</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            center,
+        )
+    )
+    elements.append(Spacer(1, 800))  # page break
+
+    # ---------------- SUMMARY ----------------
+    total = len(history)
+    spam = sum(1 for h in history if h["prediction"] == "SPAM")
+    ham = total - spam
+
+    elements.append(Paragraph("Résumé", styles["Heading2"]))
+    summary = Table(
+        [
+            ["Total", total],
+            ["SPAM", spam],
+            ["HAM", ham],
+        ],
+        colWidths=[4 * cm, 10 * cm],
+    )
+    summary.setStyle(
+        TableStyle(
+            [
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                ("FONT", (0, 0), (-1, -1), "Helvetica"),
+                ("FONT", (0, 0), (0, -1), "Helvetica-Bold"),
+            ]
+        )
+    )
+    elements.append(summary)
+    elements.append(Spacer(1, 12))
+
+    # ---------------- TABLE ----------------
+    elements.append(Paragraph("Détails des prédictions", styles["Heading2"]))
+
+    data = [["Date", "Message", "Prédiction", "Score", "Niveau"]]
+    for h in history:
+        data.append(
+            [
+                h["ts"],
+                Paragraph(h["message"], msg_style),
+                h["prediction"],
+                f"{h['score']:.3f}" if h["score"] is not None else "",
+                h["level"] or "",
+            ]
+        )
+
+    table = Table(
+        data,
+        repeatRows=1,
+        colWidths=[3 * cm, 8 * cm, 2.5 * cm, 2 * cm, 2 * cm],
+    )
+    table.setStyle(
+        TableStyle(
+            [
+                ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+                ("FONT", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ]
+        )
+    )
+
+    elements.append(table)
+    elements.append(Spacer(1, 10))
+    elements.append(
+        Paragraph("⚠️ Les prédictions peuvent contenir des erreurs.", small)
+    )
+
+    doc.build(elements, onFirstPage=footer, onLaterPages=footer)
+    buffer.seek(0)
+    return buffer
+
+# -------------------------------------------------------------------
+# Model
+# -------------------------------------------------------------------
 @st.cache_resource
 def load_or_train_model():
     os.makedirs("models", exist_ok=True)
 
-    # 1) Charger si déjà entraîné
     if os.path.exists(MODEL_PATH):
         return joblib.load(MODEL_PATH)
 
-    # 2) Sinon (Streamlit Cloud) entraîner à la volée
-    if not os.path.exists(DATA_PATH):
-        st.error("Dataset introuvable. Vérifie que `data/spam.csv` est bien sur GitHub.")
-        st.stop()
-
     df = pd.read_csv(DATA_PATH)
-    df = df.rename(columns=str.strip)
-    df["Category"] = df["Category"].astype(str).str.lower().str.strip()
-    df["Message"] = df["Message"].astype(str)
-    df["label"] = df["Category"].map({"ham": 0, "spam": 1})
+    df["Category"] = df["Category"].str.lower().str.strip()
+    df["label"] = df["Category"].map({"ham": 0, "spam": 1}).astype(int)
 
-    df = df.dropna(subset=["label"])
-    df["label"] = df["label"].astype(int)
+    model = Pipeline(
+        [
+            (
+                "tfidf",
+                TfidfVectorizer(
+                    preprocessor=normalize_spam_patterns,
+                    stop_words="english",
+                    ngram_range=(1, 2),
+                ),
+            ),
+            ("clf", LinearSVC(class_weight="balanced")),
+        ]
+    )
 
-    X = df["Message"]
-    y = df["label"]
-
-    model = Pipeline([
-        ("tfidf", TfidfVectorizer(
-            preprocessor=normalize_spam_patterns,
-            stop_words="english",
-            ngram_range=(1, 2),
-            min_df=2,
-            max_df=0.95,
-            sublinear_tf=True,
-            strip_accents="unicode"
-        )),
-        ("clf", LinearSVC(class_weight="balanced"))
-    ])
-
-    model.fit(X, y)
+    model.fit(df["Message"], df["label"])
     joblib.dump(model, MODEL_PATH)
     return model
-
 
 with st.spinner("Chargement du modèle..."):
     model = load_or_train_model()
 
+# -------------------------------------------------------------------
+# Single prediction
+# -------------------------------------------------------------------
+st.subheader("✅ Test d’un message")
 
-# =========================
-# 1) PRÉDICTION SIMPLE
-# =========================
-st.subheader("✅ Test d’un seul message")
+msg = st.text_area("Message")
 
-msg = st.text_area("Message", height=140, placeholder="Ex: Congratulations! You've won...")
+if st.button("Prédire"):
+    if msg.strip():
+        pred = model.predict([msg])[0]
+        score = model.decision_function([msg])[0]
+        level = score_level(score)
 
-if st.button("Prédire", key="single_predict"):
-    msg_clean = msg.strip()
-    if not msg_clean:
-        st.warning("Veuillez entrer un message.")
-    else:
-        pred = int(model.predict([msg_clean])[0])
         label = "🚫 SPAM" if pred == 1 else "✅ HAM"
-        st.subheader(f"Résultat : {label}")
+        st.subheader(label)
+        st.write(f"Score : **{score:.3f}** — Niveau : **{level}**")
 
-        score = None
-        level = None
-
-        if hasattr(model, "decision_function"):
-            score = float(model.decision_function([msg_clean])[0])
-            level = score_level(score)
-
-            st.caption("LinearSVC ne fournit pas de probabilité, mais un **score de décision**.")
-            st.write(f"Score de décision : **{score:.3f}**")
-            st.info(f"Niveau du score : **{level}**")
-
-            # barre indicative (0 à 1)
-            st.progress(min(1.0, abs(score) / 5.0))
-
-            if score >= 0:
-                st.write("Interprétation : score positif → plutôt **SPAM**")
-            else:
-                st.write("Interprétation : score négatif → plutôt **HAM**")
-
-        # Ajouter à l'historique
-        st.session_state.history.insert(0, {
-            "message": msg_clean,
-            "prediction": "SPAM" if pred == 1 else "HAM",
-            "score": score,
-            "level": level
-        })
-
-
-st.divider()
-
-# =========================
-# 2) TEST EN LOT
-# =========================
-st.subheader("🧪 Test en lot (plusieurs messages)")
-st.caption("Colle plusieurs messages : **1 message par ligne**. Un tableau sera affiché.")
-
-batch_text = st.text_area(
-    "Messages (1 par ligne)",
-    height=180,
-    placeholder="hello\nWIN money now!!! http://free.com\nSend your email test@mail.com"
-)
-
-cols = st.columns([1, 1, 3])
-with cols[0]:
-    run_batch = st.button("Tester en lot", key="batch_predict")
-with cols[1]:
-    clear_batch = st.button("Effacer", key="batch_clear")
-
-if clear_batch:
-    batch_text = ""
-
-if run_batch:
-    lines = [l.strip() for l in batch_text.splitlines() if l.strip()]
-    if not lines:
-        st.warning("Ajoute au moins une ligne.")
-    else:
-        preds = model.predict(lines)
-
-        scores = None
-        if hasattr(model, "decision_function"):
-            scores = model.decision_function(lines)
-
-        results = []
-        for i, m in enumerate(lines):
-            pred_i = int(preds[i])
-            label_i = "SPAM" if pred_i == 1 else "HAM"
-
-            score_i = float(scores[i]) if scores is not None else None
-            level_i = score_level(score_i) if score_i is not None else None
-
-            results.append({
-                "Message": m,
-                "Prediction": label_i,
-                "Score": score_i,
-                "Niveau": level_i
-            })
-
-            # Ajouter aussi à l'historique
-            st.session_state.history.insert(0, {
-                "message": m,
-                "prediction": label_i,
-                "score": score_i,
-                "level": level_i
-            })
-
-        st.dataframe(pd.DataFrame(results), use_container_width=True)
-
-st.divider()
-
-# =========================
-# 3) HISTORIQUE + EXPORT CSV
-# =========================
-st.subheader("🕘 Historique des prédictions")
-
-col_a, col_b = st.columns([1, 2])
-
-with col_a:
-    if st.button("🗑️ Vider l'historique", key="clear_history"):
-        st.session_state.history = []
-        st.success("Historique vidé.")
-
-with col_b:
-    if len(st.session_state.history) > 0:
-        hist_df = pd.DataFrame(st.session_state.history)
-        # Colonnes plus "propres"
-        hist_df = hist_df.rename(columns={
-            "message": "Message",
-            "prediction": "Prediction",
-            "score": "Score",
-            "level": "Niveau"
-        })
-        csv_bytes = hist_df.to_csv(index=False).encode("utf-8")
-
-        st.download_button(
-            label="⬇️ Télécharger l'historique (CSV)",
-            data=csv_bytes,
-            file_name="spam_predictions_history.csv",
-            mime="text/csv"
+        st.session_state.history.insert(
+            0,
+            {
+                "ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "message": msg,
+                "prediction": "SPAM" if pred == 1 else "HAM",
+                "score": score,
+                "level": level,
+            },
         )
 
-if len(st.session_state.history) == 0:
-    st.write("Aucune prédiction pour le moment.")
-else:
-    # Affichage limité
-    for i, item in enumerate(st.session_state.history[:15], start=1):
-        pred_txt = item.get("prediction", "")
-        msg_txt = item.get("message", "")
-        score_txt = item.get("score", None)
-        level_txt = item.get("level", None)
+# -------------------------------------------------------------------
+# History + exports
+# -------------------------------------------------------------------
+st.subheader("🕘 Historique")
 
-        st.markdown(f"**{i}. {pred_txt}**  \n{msg_txt}")
-        if score_txt is not None:
-            extra = f"Score : {float(score_txt):.3f}"
-            if level_txt:
-                extra += f" — Niveau : {level_txt}"
-            st.caption(extra)
-        st.divider()
+if st.session_state.history:
+    df_hist = pd.DataFrame(st.session_state.history)
 
-st.caption("⚠️ Ce modèle est un outil d’aide à la décision. Les prédictions peuvent contenir des erreurs.")
+    st.download_button(
+        "⬇️ Télécharger CSV",
+        df_hist.to_csv(index=False).encode(),
+        "history.csv",
+        "text/csv",
+    )
 
+    st.download_button(
+        "⬇️ Télécharger PDF (PRO)",
+        history_to_pdf_pro(st.session_state.history),
+        "history.pdf",
+        "application/pdf",
+    )
 
+    st.dataframe(df_hist, use_container_width=True)
+
+if st.button("🗑️ Vider l'historique"):
+    st.session_state.history = []
 

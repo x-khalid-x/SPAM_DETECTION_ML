@@ -1,0 +1,28 @@
+# Environnement virtuel
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# Fichiers de modèles (générés automatiquement)
+models/*.pkl
+
+# Données (si le dataset est volumineux ou fourni séparément)
+data/*.csv
+
+# Logs
+*.log
+
+# Fichiers OS
+.DS_Store
+Thumbs.db
+
+# VS Code
+.vscode/

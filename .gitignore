@@ -14,8 +14,9 @@ __pycache__/
 # Fichiers de modèles (générés automatiquement)
 models/*.pkl
 
-# Données (si le dataset est volumineux ou fourni séparément)
-data/*.csv
+# Données (on garde uniquement spam.csv pour le cloud)
+data/*
+!data/spam.csv
 
 # Logs
 *.log
@@ -26,3 +27,5 @@ Thumbs.db
 
 # VS Code
 .vscode/
+
+

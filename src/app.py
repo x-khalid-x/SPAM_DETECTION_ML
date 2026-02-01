@@ -40,7 +40,7 @@ PROJECT_TITLE = "Détection de Spam par Machine Learning"
 STUDENT_NAME = "Khalid Chliyahe"
 PROGRAM = "G.informatique"
 GITHUB_URL = "https://github.com/x-khalid-x/SPAM-DETECTION-ML"
-STREAMLIT_URL = "https://TON-APP.streamlit.app"  # ← mets ici ton vrai lien streamlit
+STREAMLIT_URL = "https://x-khalid-x-spam-detection-ml-srcapp-aelarm.streamlit.app/"  # ← mets ici ton vrai lien streamlit
 
 # -------------------------------------------------------------------
 # Streamlit setup
